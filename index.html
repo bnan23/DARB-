@@ -1,0 +1,90 @@
+
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DARB | AI Travel Planner</title>
+
+    <link rel="stylesheet" href="/style.css?v=3">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <header class="navbar">
+        <a href="#" class="logo">✦ دَرْب <span>| DARB</span></a>
+        <button type="button" id="language-btn" class="language-btn">العربية</button>
+    </header>
+
+    <main class="main-layout">
+        <section class="planner-panel">
+            <div class="hero-content">
+                <div class="tag" id="tag">✦ AI POWERED TRAVEL PLANNER</div>
+
+                <h1 id="main-title">
+                    Your next adventure,<br>
+                    <span>designed by AI.</span>
+                </h1>
+
+                <p class="description" id="description">
+                    Tell us where you want to go. We'll create a personalized travel itinerary that fits your style and budget.
+                </p>
+            </div>
+
+            <div class="planner-card">
+                <div class="card-heading">
+                    <h2 id="form-title">Plan your trip</h2>
+                    <p id="form-subtitle">Let's create something unforgettable.</p>
+                </div>
+
+                <form id="trip-form">
+                    <div class="form-group">
+                        <label id="destination-label" for="destination">Where do you want to go?</label>
+                        <input type="text" id="destination" placeholder="e.g. Paris, Japan, Dubai" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label id="days-label" for="days">Trip duration (days)</label>
+                            <input type="number" id="days" min="1" max="100" value="3" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label id="budget-label" for="budget">Your budget (SAR)</label>
+                            <input type="number" id="budget" min="1" placeholder="e.g. 5000" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label id="style-label" for="style">What's your travel style?</label>
+                        <select id="style">
+                            <option value="Relaxation" id="style-relax">Relaxation</option>
+                            <option value="Adventure" id="style-adventure">Adventure</option>
+                            <option value="Shopping" id="style-shopping">Shopping</option>
+                            <option value="Culture & History" id="style-culture">Culture & History</option>
+                            <option value="Food & Experiences" id="style-food">Food & Experiences</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" id="generate-btn">Generate my trip ✦</button>
+                </form>
+            </div>
+
+            <footer id="footer">Made for curious travelers <span>✦</span></footer>
+        </section>
+
+        <section class="results-panel">
+            <div id="empty-state" class="empty-state">
+                <div class="empty-icon">✦</div>
+                <h2 id="empty-title">Your journey starts here</h2>
+                <p id="empty-description">Fill in your travel details and let DARB create your personalized travel guide.</p>
+            </div>
+
+            <div id="result" class="result" aria-live="polite"></div>
+        </section>
+    </main>
+
+    <script src="/script.js?v=3"></script>
+</body>
+</html>
