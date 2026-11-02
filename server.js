@@ -11,81 +11,90 @@ app.post("/api/trip", async (req, res) => {
     try {
         const { destination, days, budget, style, language } = req.body;
 
-        if (!destination || !days || !budget || !style) {
+        const tripDays = Number(days);
+        const tripBudget = Number(budget);
+
+        if (
+            !destination ||
+            !Number.isInteger(tripDays) ||
+            tripDays < 1 ||
+            !Number.isFinite(tripBudget) ||
+            tripBudget <= 0 ||
+            !style
+        ) {
             return res.status(400).json({
-                error: "Please fill in all trip details."
+                error: "Please enter valid trip details."
             });
         }
 
         if (!process.env.GROQ_API_KEY) {
+            console.error("GROQ_API_KEY is missing.");
+
             return res.status(500).json({
-                error: "AI API key is missing. Check your .env file."
+                error: "The AI service is not configured."
             });
         }
 
         const outputLanguage = language === "ar" ? "Arabic" : "English";
 
         const prompt = `
-You are DARB, a professional AI travel planner.
+You are DARB, an AI travel planner.
 
-Create a useful and engaging travel itinerary.
-
+Create a practical travel itinerary using the following details:
 Destination: ${destination}
-Duration: ${days} days
-Total budget: ${budget} SAR
+Duration: ${tripDays} days
+Total budget: ${tripBudget} SAR
 Travel style: ${style}
 Language: ${outputLanguage}
 
-Return ONLY valid JSON. Do not use Markdown code fences.
+Return one valid JSON object only. Do not use Markdown fences or text outside JSON.
 
-Follow this exact structure:
+Use exactly this structure:
 {
-  "title": "Catchy trip title",
-  "subtitle": "Short travel introduction",
+  "title": "Trip title",
+  "subtitle": "Short introduction",
   "destination": "${destination}",
-  "duration": ${days},
-  "budget": ${budget},
+  "duration": ${tripDays},
+  "budget": ${tripBudget},
   "budget_breakdown": [
-    {
-      "category": "Accommodation",
-      "amount": 1000
-    }
+    {"category": "Accommodation", "amount": 0},
+    {"category": "Food", "amount": 0},
+    {"category": "Transport", "amount": 0},
+    {"category": "Activities", "amount": 0},
+    {"category": "Shopping", "amount": 0}
   ],
   "days": [
     {
       "day": 1,
       "title": "Day title",
-      "summary": "Short day description",
+      "summary": "Short summary",
       "activities": [
         {
           "time": "Morning",
           "title": "Activity title",
-          "description": "Activity details",
+          "description": "Brief details",
           "location": "Place name",
-          "estimated_cost": 100
+          "estimated_cost": 0
         }
       ],
-      "daily_total": 100
+      "daily_total": 0
     }
   ],
-  "tips": [
-    "Useful travel tip"
-  ]
+  "tips": ["Useful travel tip"]
 }
 
 Requirements:
-- Write all text in ${outputLanguage}.
-- Include exactly ${days} days.
-- Include 2 to 4 activities per day.
-- Use real, relevant attractions and places.
-- Organize activities into morning, afternoon and evening.
-- Include accommodation, food, transport, shopping and activities in the budget breakdown.
-- All costs must be numeric values in SAR.
-- Keep estimated costs within the total budget.
-- Make the itinerary practical and engaging.
+- Write all user-facing text in ${outputLanguage}.
+- Include exactly ${tripDays} day objects.
+- Include 2 activities per day to keep the response concise.
+- Use relevant real attractions; do not invent opening hours or live availability.
+- Use morning, afternoon, or evening for activity times.
+- All costs must be numeric SAR estimates.
+- Keep costs realistic for the destination and within the total budget.
+- The budget breakdown should cover accommodation, food, transport, activities, and shopping.
+- Keep descriptions concise.
 - Prices are estimates, not live-verified.
-- Never invent live opening hours or availability.
-- Do not include Markdown or decorative stars.
+- Ensure the JSON is complete and valid, with all strings and property names correctly quoted.
 `;
 
         const response = await fetch(
@@ -101,16 +110,18 @@ Requirements:
                     messages: [
                         {
                             role: "system",
-                            content: "You are DARB. Return valid JSON only, following the user's requested structure."
+                            content:
+                                "You are DARB. Return only a complete, valid JSON object. Never add Markdown or explanations."
                         },
                         {
                             role: "user",
                             content: prompt
                         }
                     ],
-                    temperature: 0.5,
-                    max_completion_tokens: 8000
-                })
+                    temperature: 0.3,
+                    max_completion_tokens: 4000
+                }),
+                signal: AbortSignal.timeout(90000)
             }
         );
 
@@ -119,35 +130,78 @@ Requirements:
         if (!response.ok) {
             console.error("Groq API error:", response.status, data);
 
+            if (response.status === 429) {
+                return res.status(429).json({
+                    error: "The AI service is busy. Please wait a few seconds and try again."
+                });
+            }
+
             return res.status(502).json({
                 error: "The AI service could not generate your trip. Please try again."
             });
         }
 
-        const rawPlan = data.choices?.[0]?.message?.content;
+        const choice = data.choices?.[0];
+        const rawPlan = choice?.message?.content;
 
-        if (!rawPlan) {
-            throw new Error("The AI returned an empty response.");
+        if (!rawPlan || typeof rawPlan !== "string") {
+            console.error("Groq returned no message content.");
+
+            return res.status(502).json({
+                error: "The AI returned an empty response. Please try again."
+            });
+        }
+
+        if (choice.finish_reason === "length") {
+            console.error("Groq response reached the token limit.");
+
+            return res.status(502).json({
+                error: "The itinerary was too long to complete. Please try fewer days."
+            });
         }
 
         const cleanPlan = rawPlan
-            .replace(/^```json\s*/i, "")
-            .replace(/^```\s*/i, "")
+            .replace(/^```(?:json)?\s*/i, "")
             .replace(/\s*```$/i, "")
             .trim();
 
-        const plan = JSON.parse(cleanPlan);
+        let plan;
 
-        if (!Array.isArray(plan.days) || !plan.title) {
-            throw new Error("The AI returned an incomplete itinerary.");
+        try {
+            plan = JSON.parse(cleanPlan);
+        } catch (parseError) {
+            console.error("Invalid JSON from Groq:", parseError.message);
+
+            return res.status(502).json({
+                error: "The AI returned an incomplete itinerary. Please try again."
+            });
         }
 
-        res.json({ plan });
+        if (
+            !plan ||
+            typeof plan.title !== "string" ||
+            !Array.isArray(plan.days) ||
+            plan.days.length !== tripDays
+        ) {
+            console.error("Groq returned an invalid itinerary structure.");
+
+            return res.status(502).json({
+                error: "The itinerary was incomplete. Please try again."
+            });
+        }
+
+        return res.json({ plan });
 
     } catch (error) {
         console.error("Trip generation error:", error);
 
-        res.status(500).json({
+        if (error.name === "TimeoutError") {
+            return res.status(504).json({
+                error: "The AI service took too long to respond. Please try again."
+            });
+        }
+
+        return res.status(500).json({
             error: "We couldn't create your trip. Please try again."
         });
     }
@@ -156,7 +210,7 @@ Requirements:
 const PORT = process.env.PORT || 3000;
 
 const server = app.listen(PORT, "0.0.0.0", () => {
-        console.log(`DARB is running at http://127.0.0.1:${PORT}`);
+    console.log(`DARB is running on port ${PORT}`);
 });
 
 server.on("error", (error) => {
